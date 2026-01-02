@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fair Value Engine</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h2>Fair Value Engine</h2>
+
+    <!-- 🔍 SEARCH -->
+    <form id="searchForm">
+        <label>Search Fair Value</label>
+        <input type="text" name="item_id" placeholder="e.g. iphone15" required>
+        <button type="submit">Search</button>
+    </form>
+
+    <div id="searchResultText"></div>
+
+    <!-- ✍️ SUBMIT PRICE -->
+    <form action="/submit" method="post">
+        <label>Item ID</label>
+        <input type="text" name="item_id" required>
+
+        <label>Price</label>
+        <input type="number" name="price" step="0.01" required>
+
+        <button type="submit">Submit Price</button>
+    </form>
+
+    {% if message %}
+        <div class="message">{{ message }}</div>
+    {% endif %}
+
+    {% if result %}
+        <div class="result">
+            <h3>Fair Value for "{{ item_id }}"</h3>
+            <ul>
+                <li><strong>Fair Value:</strong> {{ result.fair_value }}</li>
+                <li><strong>Median:</strong> {{ result.median }}</li>
+                <li><strong>Trimmed Mean:</strong> {{ result.trimmed_mean }}</li>
+                <li><strong>Data Points Used:</strong> {{ result.data_points_used }}</li>
+                <li><strong>Confidence:</strong> {{ result.confidence }}</li>
+            </ul>
+        </div>
+
+        <!-- Auto-load chart after submit -->
+        <div class="result">
+            <h3>Fair Value Trend</h3>
+            <canvas id="trendChart"></canvas>
+        </div>
+
+        <script>
+            window.addEventListener("load", () => {
+                loadChart("{{ item_id }}");
+            });
+        </script>
+    {% else %}
+        <div class="result">
+            <h3>Fair Value Trend</h3>
+            <canvas id="trendChart"></canvas>
+        </div>
+    {% endif %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let chart;
+
+// Load numeric result
+async function loadSearchResult(item_id) {
+    const box = document.getElementById("searchResultText");
+    box.innerHTML = "Loading...";
+
+    const res = await fetch(`/api/fair-value/${item_id}`);
+    const data = await res.json();
+
+    if (data.error) {
+        box.innerHTML = `<div class="message">${data.error}</div>`;
+        return;
+    }
+
+    box.innerHTML = `
+        <div class="result">
+            <h3>Fair Value for "${item_id}"</h3>
+            <ul>
+                <li><strong>Fair Value:</strong> ${data.fair_value}</li>
+                <li><strong>Median:</strong> ${data.median}</li>
+                <li><strong>Trimmed Mean:</strong> ${data.trimmed_mean}</li>
+                <li><strong>Data Points Used:</strong> ${data.data_points_used}</li>
+                <li><strong>Confidence:</strong> ${data.confidence}</li>
+            </ul>
+        </div>
+    `;
+}
+
+// Load chart
+async function loadChart(item_id) {
+    const ctx = document.getElementById("trendChart").getContext("2d");
+
+    const res = await fetch(`/chart-data/${item_id}`);
+    const data = await res.json();
+
+    if (!data.timestamps) return;
+
+    const chartData = {
+        labels: data.timestamps,
+        datasets: [
+            { label: "Fair Value", data: data.fair_value, borderColor: "blue", tension: 0.3 },
+            { label: "Median", data: data.median, borderColor: "green", tension: 0.3 },
+            { label: "Trimmed Mean", data: data.trimmed_mean, borderColor: "orange", tension: 0.3 }
+        ]
+    };
+
+    if (chart) {
+        chart.data = chartData;
+        chart.update();
+    } else {
+        chart = new Chart(ctx, { type: "line", data: chartData });
+    }
+}
+
+// Search handler
+document.getElementById("searchForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const item = e.target.item_id.value.trim();
+    loadSearchResult(item);
+    loadChart(item);
+});
+</script>
+
+</body>
+</html>
